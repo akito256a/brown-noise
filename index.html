@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ブラウンノイズサーバー</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --surface-0: #f0ede8;
+      --surface-1: #f8f6f2;
+      --surface-2: #ffffff;
+      --border: rgba(0,0,0,0.12);
+      --border-strong: rgba(0,0,0,0.22);
+      --border-accent: #185fa5;
+      --border-success: #3b6d11;
+      --border-warning: #854f0b;
+      --border-danger: #a32d2d;
+      --text-primary: #1a1a18;
+      --text-secondary: #5f5e5a;
+      --text-muted: #888780;
+      --text-accent: #185fa5;
+      --text-success: #3b6d11;
+      --text-warning: #854f0b;
+      --text-danger: #a32d2d;
+      --bg-accent: #e6f1fb;
+      --bg-success: #eaf3de;
+      --bg-warning: #faeeda;
+      --bg-danger: #fcebeb;
+      --fill-accent: #378add;
+      --radius: 8px;
+      --font-sans: system-ui, -apple-system, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface-0: #1a1a18;
+        --surface-1: #242422;
+        --surface-2: #2e2e2b;
+        --border: rgba(255,255,255,0.10);
+        --border-strong: rgba(255,255,255,0.20);
+        --border-accent: #85b7eb;
+        --border-success: #97c459;
+        --border-warning: #ef9f27;
+        --border-danger: #f09595;
+        --text-primary: #f0ede8;
+        --text-secondary: #b4b2a9;
+        --text-muted: #888780;
+        --text-accent: #85b7eb;
+        --text-success: #97c459;
+        --text-warning: #ef9f27;
+        --text-danger: #f09595;
+        --bg-accent: #042c53;
+        --bg-success: #173404;
+        --bg-warning: #412402;
+        --bg-danger: #501313;
+        --fill-accent: #378add;
+      }
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--surface-0);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .app { width: 100%; max-width: 480px; }
+
+    h1 { font-size: 22px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 1.5rem; }
+
+    .card {
+      background: var(--surface-2);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .timer-card {
+      background: var(--surface-1);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .timer-display {
+      font-size: 48px;
+      font-weight: 500;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+      font-family: ui-monospace, 'SF Mono', monospace;
+    }
+
+    .timer-sub { font-size: 13px; color: var(--text-muted); }
+
+    .progress-bar-wrap {
+      background: var(--surface-0);
+      border-radius: 99px;
+      height: 4px;
+      margin-top: 12px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .progress-bar {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--fill-accent);
+      transition: width 1s linear;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+
+    .status-badge.idle { background: var(--surface-1); border: 0.5px solid var(--border); color: var(--text-muted); }
+    .status-badge.playing { background: var(--bg-success); border: 0.5px solid var(--border-success); color: var(--text-success); }
+    .status-badge.fading { background: var(--bg-warning); border: 0.5px solid var(--border-warning); color: var(--text-warning); }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .dot.pulse { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: block; }
+
+    .duration-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1rem; }
+
+    .dur-btn {
+      border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius);
+      padding: 10px 4px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--surface-1);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      font-family: var(--font-sans);
+    }
+
+    .dur-btn:hover:not(:disabled) { border-color: var(--border-accent); color: var(--text-accent); }
+    .dur-btn.active { background: var(--bg-accent); border-color: var(--border-accent); color: var(--text-accent); }
+    .dur-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .custom-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; }
+
+    .custom-row input[type="number"] {
+      width: 88px;
+      border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      font-size: 14px;
+      color: var(--text-primary);
+      background: var(--surface-1);
+      font-family: var(--font-sans);
+      outline: none;
+    }
+
+    .custom-row input[type="number"]:focus { border-color: var(--border-accent); }
+    .custom-row span { font-size: 13px; color: var(--text-secondary); }
+
+    .vol-row { display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem; }
+
+    .vol-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--fill-accent);
+    }
+
+    .vol-label { font-size: 13px; color: var(--text-muted); min-width: 36px; text-align: right; }
+
+    .play-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-family: var(--font-sans);
+    }
+
+    .play-btn.idle { background: var(--fill-accent); color: #fff; }
+    .play-btn.idle:hover:not(:disabled) { opacity: 0.88; }
+    .play-btn.playing { background: var(--bg-danger); border: 0.5px solid var(--border-danger); color: var(--text-danger); }
+    .play-btn.playing:hover { opacity: 0.85; }
+    .play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    footer { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 1.5rem; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <h1>ブラウンノイズサーバー</h1>
+  <p class="subtitle">リラクゼーション用ブラウンノイズジェネレーター</p>
+
+  <span class="status-badge idle" id="status-badge">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">待機中</span>
+  </span>
+
+  <div class="timer-card">
+    <div class="timer-display" id="timer-display">--:--:--</div>
+    <div class="timer-sub" id="timer-sub">再生時間を設定してください</div>
+    <div class="progress-bar-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">再生時間</span>
+    <div class="duration-grid">
+      <button class="dur-btn" data-min="15">15分</button>
+      <button class="dur-btn" data-min="30">30分</button>
+      <button class="dur-btn" data-min="60">1時間</button>
+      <button class="dur-btn" data-min="120">2時間</button>
+    </div>
+    <div class="custom-row">
+      <input type="number" id="custom-min" min="1" max="480" placeholder="例: 45">
+      <span>分（カスタム入力）</span>
+    </div>
+    <span class="label">音量</span>
+    <div class="vol-row">
+      <i class="ti ti-volume" style="font-size:18px;color:var(--text-muted)" aria-hidden="true"></i>
+      <input type="range" id="vol-slider" min="0" max="100" value="60" step="1">
+      <i class="ti ti-volume-2" style="font-size:18px;color:var(--text-muted)" aria-hidden="true"></i>
+      <span class="vol-label" id="vol-label">60%</span>
+    </div>
+    <button class="play-btn idle" id="play-btn" disabled>
+      <i class="ti ti-player-play" id="play-icon" style="font-size:18px" aria-hidden="true"></i>
+      <span id="play-text">再生時間を選択してください</span>
+    </button>
+  </div>
+
+  <footer>Web Audio API 使用 / 外部サーバー接続なし・完全ローカル動作</footer>
+</div>
+
+<script>
+(function(){
+  const FADE = 5;
+  let audioCtx = null, bufferSource = null, gainNode = null;
+  let totalSeconds = 0, remainingSeconds = 0;
+  let timerInterval = null, isPlaying = false;
+
+  const $ = id => document.getElementById(id);
+  const playBtn = $('play-btn'), playIcon = $('play-icon'), playText = $('play-text');
+  const timerDisplay = $('timer-display'), timerSub = $('timer-sub');
+  const statusBadge = $('status-badge'), statusDot = $('status-dot'), statusText = $('status-text');
+  const volSlider = $('vol-slider'), volLabel = $('vol-label');
+  const progressBar = $('progress-bar'), progressWrap = $('progress-wrap');
+  const customMin = $('custom-min');
+
+  function setStatus(state) {
+    statusBadge.className = 'status-badge ' + state;
+    if (state === 'idle') { statusDot.className = 'dot'; statusText.textContent = '待機中'; }
+    else if (state === 'playing') { statusDot.className = 'dot pulse'; statusText.textContent = '再生中'; }
+    else if (state === 'fading') { statusDot.className = 'dot pulse'; statusText.textContent = 'フェードアウト中'; }
+  }
+
+  function formatTime(s) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return [h, m, sec].map(v => String(v).padStart(2, '0')).join(':');
+  }
+
+  function createBrownNoise(ctx) {
+    const bufSize = ctx.sampleRate * 10;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < bufSize; i++) {
+      last += (Math.random() * 2 - 1) * 0.02;
+      last = Math.max(-1, Math.min(1, last));
+      data[i] = last;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    return src;
+  }
+
+  function startPlayback() {
+    if (!totalSeconds) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    const target = (volSlider.value / 100) * 0.8;
+    gainNode.gain.linearRampToValueAtTime(target, audioCtx.currentTime + FADE);
+    gainNode.connect(audioCtx.destination);
+    bufferSource = createBrownNoise(audioCtx);
+    bufferSource.connect(gainNode);
+    bufferSource.start();
+    isPlaying = true;
+    remainingSeconds = totalSeconds;
+    progressWrap.style.display = 'block';
+    updateProgress();
+    timerInterval = setInterval(() => {
+      remainingSeconds--;
+      if (remainingSeconds <= 0) {
+        remainingSeconds = 0;
+        updateProgress();
+        stopPlayback(true);
+        return;
+      }
+      if (remainingSeconds === FADE) {
+        setStatus('fading');
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + FADE);
+      }
+      updateProgress();
+    }, 1000);
+    setStatus('playing');
+    playBtn.className = 'play-btn playing';
+    playIcon.className = 'ti ti-player-stop';
+    playText.textContent = '停止';
+    timerSub.textContent = 'フェードイン中（5秒）→ 再生';
+    setTimeout(() => { if (isPlaying) timerSub.textContent = '再生中'; }, (FADE + 1) * 1000);
+    document.querySelectorAll('.dur-btn').forEach(b => b.disabled = true);
+    customMin.disabled = true;
+    volSlider.disabled = true;
+  }
+
+  function stopPlayback(auto = false) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    isPlaying = false;
+    if (gainNode && audioCtx && !auto) {
+      gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + FADE);
+      setStatus('fading');
+      timerSub.textContent = 'フェードアウト中...';
+      setTimeout(cleanup, (FADE + 0.2) * 1000);
+    } else {
+      cleanup();
+    }
+    playBtn.className = 'play-btn idle';
+    playIcon.className = 'ti ti-player-play';
+    playText.textContent = '再生';
+    document.querySelectorAll('.dur-btn').forEach(b => b.disabled = false);
+    customMin.disabled = false;
+    volSlider.disabled = false;
+    if (auto) {
+      timerDisplay.textContent = '00:00:00';
+      timerSub.textContent = '再生完了';
+      progressBar.style.width = '100%';
+      setTimeout(() => {
+        setStatus('idle');
+        timerSub.textContent = '再生時間を設定してください';
+        timerDisplay.textContent = '--:--:--';
+        progressWrap.style.display = 'none';
+        progressBar.style.width = '0%';
+      }, 3000);
+    }
+  }
+
+  function cleanup() {
+    if (bufferSource) { try { bufferSource.stop(); } catch(e){} bufferSource = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    gainNode = null;
+    if (!isPlaying) { setStatus('idle'); timerSub.textContent = '再生時間を設定してください'; }
+  }
+
+  function updateProgress() {
+    timerDisplay.textContent = formatTime(remainingSeconds);
+    const pct = Math.round(((totalSeconds - remainingSeconds) / totalSeconds) * 100);
+    progressBar.style.width = pct + '%';
+  }
+
+  function setDuration(mins) {
+    totalSeconds = mins * 60;
+    timerDisplay.textContent = formatTime(totalSeconds);
+    timerSub.textContent = `${mins}分間 再生する準備ができました`;
+    playBtn.disabled = false;
+    playText.textContent = '再生開始';
+    playBtn.className = 'play-btn idle';
+  }
+
+  document.querySelectorAll('.dur-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      customMin.value = '';
+      setDuration(parseInt(btn.dataset.min));
+    });
+  });
+
+  customMin.addEventListener('input', () => {
+    const v = parseInt(customMin.value);
+    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+    if (v && v >= 1 && v <= 480) {
+      setDuration(v);
+    } else {
+      playBtn.disabled = true;
+      playText.textContent = '有効な分数を入力してください';
+      timerDisplay.textContent = '--:--:--';
+    }
+  });
+
+  volSlider.addEventListener('input', () => {
+    volLabel.textContent = volSlider.value + '%';
+    if (gainNode && isPlaying) {
+      const target = (volSlider.value / 100) * 0.8;
+      gainNode.gain.setTargetAtTime(target, audioCtx.currentTime, 0.1);
+    }
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) stopPlayback(false);
+    else startPlayback();
+  });
+})();
+</script>
+</body>
+</html>
