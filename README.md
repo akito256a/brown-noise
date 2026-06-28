@@ -1,2 +1,2 @@
 # brown-noise
-Brown noise generator built with Web Audio API
+Web Audio API を使ったブラウンノイズジェネレーター。
